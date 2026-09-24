@@ -27,6 +27,9 @@ http {
 
     keepalive_timeout  65;
 
+    # Rate limit for the public fortune endpoints (anonymous users allowed)
+    limit_req_zone $binary_remote_addr zone=fortune:10m rate=5r/s;
+
     server {
         listen       8000;
         server_name  ${GATEWAY_SERVER_NAME};
@@ -64,6 +67,8 @@ http {
             rewrite ^(.*) $1.proteced;
           }
 
+          # Never trust a client-sent user header
+          proxy_set_header X-User-Info "";
           proxy_pass ${COMMENT_SERVICE_URL};
         }
 
@@ -77,8 +82,40 @@ http {
           internal;
         }
 
+        # Protected fortune data (saved profiles and reading history)
+        location /comment-svc/api/fortune/me/ {
+          auth_request /authentication;
+          error_page 401 = @unauthorized_json;
+          auth_request_set $auth_user $upstream_http_x_user_info;
+          proxy_set_header X-User-Info $auth_user;
+          proxy_pass ${COMMENT_SERVICE_URL};
+        }
+
+        # JSON 401 in the {meta} envelope the frontend expects
+        location @unauthorized_json {
+          default_type application/json;
+          return 401 '{"meta":{"ok":false,"message":"Vui lòng đăng nhập!"}}';
+        }
+
+        location @too_many_requests_json {
+          default_type application/json;
+          return 429 '{"meta":{"ok":false,"message":"Bạn thao tác quá nhanh, vui lòng thử lại sau giây lát."}}';
+        }
+
+        # Public fortune compute endpoints: anonymous allowed, rate limited
+        location /comment-svc/api/fortune/ {
+          limit_req zone=fortune burst=20 nodelay;
+          limit_req_status 429;
+          error_page 429 = @too_many_requests_json;
+          proxy_set_header X-User-Info "";
+          proxy_pass ${COMMENT_SERVICE_URL};
+        }
+
         # Satellite service
         location /comment-svc/api {
+          # Never trust a client-sent user header: the comment service
+          # reads it as the logged-in user
+          proxy_set_header X-User-Info "";
           proxy_pass ${COMMENT_SERVICE_URL};
         }
 
