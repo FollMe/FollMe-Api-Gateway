@@ -29,6 +29,10 @@ http {
 
     # Rate limit for the public fortune endpoints (anonymous users allowed)
     limit_req_zone $binary_remote_addr zone=fortune:10m rate=5r/s;
+    # and for reacting to posts
+    limit_req_zone $binary_remote_addr zone=reactions:10m rate=5r/s;
+    # and for guests answering invitations / writing wishes (no login)
+    limit_req_zone $binary_remote_addr zone=invitations:10m rate=1r/s;
 
     server {
         listen       8000;
@@ -38,6 +42,7 @@ http {
         proxy_ssl_server_name on;
         add_header "Access-Control-Allow-Origin" "*" always;
         add_header "Access-Control-Allow-Headers" "Content-Type,Accept,Accept-Language,authorization" always;
+        add_header "Access-Control-Allow-Methods" "GET,POST,PUT,DELETE,OPTIONS" always;
 
         if ($request_method = "OPTIONS") {
           return 204;
@@ -89,6 +94,26 @@ http {
           auth_request_set $auth_user $upstream_http_x_user_info;
           proxy_set_header X-User-Info $auth_user;
           proxy_pass ${COMMENT_SERVICE_URL};
+        }
+
+        # Protected reactions ("thả tim") of the current user
+        location /comment-svc/api/reactions/me/ {
+          limit_req zone=reactions burst=10 nodelay;
+          limit_req_status 429;
+          error_page 429 = @too_many_requests_json;
+          auth_request /authentication;
+          error_page 401 = @unauthorized_json;
+          auth_request_set $auth_user $upstream_http_x_user_info;
+          proxy_set_header X-User-Info $auth_user;
+          proxy_pass ${COMMENT_SERVICE_URL};
+        }
+
+        # Anonymous writes on invitations (RSVP, wishes): rate limited
+        location ~ ^/api/(invitations/[^/]+/(rsvp|wishes)|events/[^/]+/public/(rsvp|wishes))$ {
+          limit_req zone=invitations burst=5 nodelay;
+          limit_req_status 429;
+          error_page 429 = @too_many_requests_json;
+          proxy_pass ${MAIN_SERVICE_URL};
         }
 
         # JSON 401 in the {meta} envelope the frontend expects
