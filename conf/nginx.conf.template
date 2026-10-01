@@ -119,6 +119,14 @@ http {
           proxy_pass ${MAIN_SERVICE_URL};
         }
 
+        # Wedding photo uploads (host only; the service checks the login).
+        # The frontend shrinks photos first, this is the ceiling.
+        location ~ ^/api/events/[^/]+/photos$ {
+          client_max_body_size 7m;
+          error_page 413 = @payload_too_large_json;
+          proxy_pass ${MAIN_SERVICE_URL};
+        }
+
         # Public auth endpoints: rate limited against guessing and mail spam
         location ~ ^/api/auth/(local|code|sign-up)$ {
           limit_req zone=auth burst=10 nodelay;
@@ -131,6 +139,11 @@ http {
         location @unauthorized_json {
           default_type application/json;
           return 401 '{"meta":{"ok":false,"message":"Vui lòng đăng nhập!"}}';
+        }
+
+        location @payload_too_large_json {
+          default_type application/json;
+          return 413 '{"meta":{"ok":false,"message":"Ảnh quá lớn, vui lòng chọn ảnh khác!"}}';
         }
 
         location @too_many_requests_json {
