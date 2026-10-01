@@ -33,6 +33,8 @@ http {
     limit_req_zone $binary_remote_addr zone=reactions:10m rate=5r/s;
     # and for guests answering invitations / writing wishes (no login)
     limit_req_zone $binary_remote_addr zone=invitations:10m rate=1r/s;
+    # and for login / sign-up (password and code guessing, mail sending)
+    limit_req_zone $binary_remote_addr zone=auth:10m rate=30r/m;
 
     server {
         listen       8000;
@@ -80,6 +82,7 @@ http {
         # Protected Satellite service
         location = /comment-svc/api/comments.proteced {
           auth_request /authentication;
+          error_page 401 = @unauthorized_json;
           auth_request_set $auth_user $upstream_http_x_user_info;
           rewrite ^(.*).proteced $1 break;
           proxy_pass ${COMMENT_SERVICE_URL};
@@ -111,6 +114,14 @@ http {
         # Anonymous writes on invitations (RSVP, wishes): rate limited
         location ~ ^/api/(invitations/[^/]+/(rsvp|wishes)|events/[^/]+/public/(rsvp|wishes))$ {
           limit_req zone=invitations burst=5 nodelay;
+          limit_req_status 429;
+          error_page 429 = @too_many_requests_json;
+          proxy_pass ${MAIN_SERVICE_URL};
+        }
+
+        # Public auth endpoints: rate limited against guessing and mail spam
+        location ~ ^/api/auth/(local|code|sign-up)$ {
+          limit_req zone=auth burst=10 nodelay;
           limit_req_status 429;
           error_page 429 = @too_many_requests_json;
           proxy_pass ${MAIN_SERVICE_URL};
