@@ -31,6 +31,8 @@ http {
     limit_req_zone $binary_remote_addr zone=fortune:10m rate=5r/s;
     # and for reacting to posts
     limit_req_zone $binary_remote_addr zone=reactions:10m rate=5r/s;
+    # and for guests answering invitations / writing wishes (no login)
+    limit_req_zone $binary_remote_addr zone=invitations:10m rate=1r/s;
 
     server {
         listen       8000;
@@ -104,6 +106,14 @@ http {
           auth_request_set $auth_user $upstream_http_x_user_info;
           proxy_set_header X-User-Info $auth_user;
           proxy_pass ${COMMENT_SERVICE_URL};
+        }
+
+        # Anonymous writes on invitations (RSVP, wishes): rate limited
+        location ~ ^/api/(invitations/[^/]+/(rsvp|wishes)|events/[^/]+/public/(rsvp|wishes))$ {
+          limit_req zone=invitations burst=5 nodelay;
+          limit_req_status 429;
+          error_page 429 = @too_many_requests_json;
+          proxy_pass ${MAIN_SERVICE_URL};
         }
 
         # JSON 401 in the {meta} envelope the frontend expects
