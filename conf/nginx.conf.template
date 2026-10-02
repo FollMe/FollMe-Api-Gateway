@@ -35,6 +35,8 @@ http {
     limit_req_zone $binary_remote_addr zone=invitations:10m rate=1r/s;
     # and for login / sign-up (password and code guessing, mail sending)
     limit_req_zone $binary_remote_addr zone=auth:10m rate=30r/m;
+    # and for browsers reporting JavaScript errors (a broken page loops)
+    limit_req_zone $binary_remote_addr zone=client_errors:10m rate=10r/m;
 
     server {
         listen       8000;
@@ -124,6 +126,16 @@ http {
         location ~ ^/api/events/[^/]+/photos$ {
           client_max_body_size 7m;
           error_page 413 = @payload_too_large_json;
+          proxy_pass ${MAIN_SERVICE_URL};
+        }
+
+        # JavaScript errors from browsers: small bodies, rate limited; extra
+        # reports are dropped quietly (the page does not retry)
+        location = /api/client-errors {
+          limit_req zone=client_errors burst=5 nodelay;
+          limit_req_status 429;
+          error_page 429 = @too_many_requests_json;
+          client_max_body_size 16k;
           proxy_pass ${MAIN_SERVICE_URL};
         }
 
