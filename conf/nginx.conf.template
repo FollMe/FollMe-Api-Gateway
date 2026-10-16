@@ -123,9 +123,9 @@ http {
           proxy_pass ${MAIN_SERVICE_URL};
         }
 
-        # Anonymous writes on invitations (RSVP, wishes, "I sent a gift"): rate limited
+        # Anonymous writes on invitations (RSVP, wishes, "I sent a gift", "I am here"): rate limited
         # The burst covers a room of guests on one venue Wi-Fi writing wishes from the screen's QR at once
-        location ~ ^/api/(invitations/[^/]+/(rsvp|wishes|gift)|events/[^/]+/public/(rsvp|wishes))$ {
+        location ~ ^/api/(invitations/[^/]+/(rsvp|wishes|gift|arrive)|events/[^/]+/public/(rsvp|wishes))$ {
           limit_req zone=invitations burst=20 nodelay;
           limit_req_status 429;
           error_page 429 = @too_many_requests_json;
