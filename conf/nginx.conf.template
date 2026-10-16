@@ -113,8 +113,8 @@ http {
           proxy_pass ${COMMENT_SERVICE_URL};
         }
 
-        # Anonymous writes on invitations (RSVP, wishes): rate limited
-        location ~ ^/api/(invitations/[^/]+/(rsvp|wishes)|events/[^/]+/public/(rsvp|wishes))$ {
+        # Anonymous writes on invitations (RSVP, wishes, "I sent a gift"): rate limited
+        location ~ ^/api/(invitations/[^/]+/(rsvp|wishes|gift)|events/[^/]+/public/(rsvp|wishes))$ {
           limit_req zone=invitations burst=5 nodelay;
           limit_req_status 429;
           error_page 429 = @too_many_requests_json;
