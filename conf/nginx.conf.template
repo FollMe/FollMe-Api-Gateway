@@ -33,6 +33,8 @@ http {
     limit_req_zone $binary_remote_addr zone=reactions:10m rate=5r/s;
     # and for guests answering invitations / writing wishes (no login)
     limit_req_zone $binary_remote_addr zone=invitations:10m rate=1r/s;
+    # "Bạn ngồi bàn nào?" on the day: guests at the venue often share one Wi-Fi address
+    limit_req_zone $binary_remote_addr zone=seats:10m rate=5r/s;
     # and for login / sign-up (password and code guessing, mail sending)
     limit_req_zone $binary_remote_addr zone=auth:10m rate=30r/m;
     # and for browsers reporting JavaScript errors (a broken page loops)
@@ -113,9 +115,18 @@ http {
           proxy_pass ${COMMENT_SERVICE_URL};
         }
 
+        # Seat lookups on the shared link, read-only: looser than the writes below
+        location ~ ^/api/events/[^/]+/public/seat$ {
+          limit_req zone=seats burst=20 nodelay;
+          limit_req_status 429;
+          error_page 429 = @too_many_requests_json;
+          proxy_pass ${MAIN_SERVICE_URL};
+        }
+
         # Anonymous writes on invitations (RSVP, wishes, "I sent a gift"): rate limited
+        # The burst covers a room of guests on one venue Wi-Fi writing wishes from the screen's QR at once
         location ~ ^/api/(invitations/[^/]+/(rsvp|wishes|gift)|events/[^/]+/public/(rsvp|wishes))$ {
-          limit_req zone=invitations burst=5 nodelay;
+          limit_req zone=invitations burst=20 nodelay;
           limit_req_status 429;
           error_page 429 = @too_many_requests_json;
           proxy_pass ${MAIN_SERVICE_URL};
