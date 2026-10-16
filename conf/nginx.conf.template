@@ -140,6 +140,17 @@ http {
           proxy_pass ${MAIN_SERVICE_URL};
         }
 
+        # Photos guests took at the party, sent from their card (no login):
+        # the photo ceiling as above, rate limited like the other guest writes
+        location ~ ^/api/invitations/[^/]+/photos$ {
+          client_max_body_size 7m;
+          error_page 413 = @payload_too_large_json;
+          limit_req zone=invitations burst=20 nodelay;
+          limit_req_status 429;
+          error_page 429 = @too_many_requests_json;
+          proxy_pass ${MAIN_SERVICE_URL};
+        }
+
         # JavaScript errors from browsers: small bodies, rate limited; extra
         # reports are dropped quietly (the page does not retry)
         location = /api/client-errors {
