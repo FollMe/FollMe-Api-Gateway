@@ -35,6 +35,8 @@ http {
     limit_req_zone $binary_remote_addr zone=invitations:10m rate=1r/s;
     # "Bạn ngồi bàn nào?" on the day: guests at the venue often share one Wi-Fi address
     limit_req_zone $binary_remote_addr zone=seats:10m rate=5r/s;
+    # Opening a surprise gift box with its password: a few tries, not a guessing script
+    limit_req_zone $binary_remote_addr zone=surprises:10m rate=12r/m;
     # and for login / sign-up (password and code guessing, mail sending)
     limit_req_zone $binary_remote_addr zone=auth:10m rate=30r/m;
     # and for browsers reporting JavaScript errors (a broken page loops)
@@ -127,6 +129,14 @@ http {
         # The burst covers a room of guests on one venue Wi-Fi writing wishes from the screen's QR at once
         location ~ ^/api/(invitations/[^/]+/(rsvp|wishes|gift|arrive)|events/[^/]+/public/(rsvp|wishes))$ {
           limit_req zone=invitations burst=20 nodelay;
+          limit_req_status 429;
+          error_page 429 = @too_many_requests_json;
+          proxy_pass ${MAIN_SERVICE_URL};
+        }
+
+        # The birthday surprise: unlocking with the password and picking the gift
+        location ~ ^/api/surprises/[^/]+/(unlock|pick)$ {
+          limit_req zone=surprises burst=6 nodelay;
           limit_req_status 429;
           error_page 429 = @too_many_requests_json;
           proxy_pass ${MAIN_SERVICE_URL};
